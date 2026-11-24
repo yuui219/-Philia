@@ -1242,6 +1242,7 @@
     t.custom_css = pu.custom_css ?? D.getElementById('customCSS')?.value ?? D.getElementById('custom-style')?.textContent ?? '';
     return t;
   }
+  // 必须比较完整 CSS；只比较长度和开头会把不同美化误判成同一套。
   const themeSig = t => JSON.stringify([...Object.values(PV_COLOR_VARS).map(f => t[f]), ...PV_KEYS.map(k => t[k]), String(t.custom_css ?? '')]);
   const themeObj = name => (name === curTheme() ? liveTheme(name) : getTheme(name) ?? { name });
 
@@ -1512,33 +1513,27 @@ ${last && !m.user ? '<div class="swipe_right fa-solid fa-chevron-right"></div>' 
   // 切到某套美化，等样式「真的变过去并且稳定」再读取；每套最多 4 秒，绝不会无限等待
   async function captureTheme(n, prevSig) {
     const s = D.querySelector('#themes');
+    if (!s || ![...s.options].some(o => o.value === n)) return null;
     const fire = () => { s.value = n; s.dispatchEvent(new P.Event('change', { bubbles: true })); };
     fire();
     const t0 = Date.now();
     let last = '', stable = 0, changed = false, refired = false;
-    while (Date.now() - t0 < 4000) {
-      await sleep(80);
-      if (s.value !== n && !refired) { refired = true; fire(); }
-      const pu = puNow();
-      if (pu.theme !== undefined && pu.theme !== n) { stable = 0; continue; }
+    const selected = () => s.isConnected && s.value === n;
+    const active = () => { const v = puNow().theme; return v === undefined || v === n; };
+    while (Date.now() - t0 < 6500) {
+      await sleep(100);
+      if (!selected() && !refired) { refired = true; fire(); }
+      if (!selected() || !active()) { stable = 0; continue; }
       const live = liveTheme(n), sg = themeSig(live);
       if (sg !== prevSig) changed = true;
       if (sg === last) stable++; else { stable = 0; last = sg; }
-      if (stable >= 3 && (changed || Date.now() - t0 > 900)) {
-        // 切换动画结束后再做最后一次核验，避免把上一套或切换中的样式记到当前名称下
-        await sleep(160);
-        if (s.value !== n) { stable = 0; continue; }
-        const finalPu = puNow();
-        if (finalPu.theme !== undefined && finalPu.theme !== n) { stable = 0; continue; }
+      // 样式连续稳定后再等待一小段，并重新核对当前选择、实际主题和 CSS，防止切换中的旧样式被记到新名字下。
+      if (stable >= 5 && (changed || Date.now() - t0 > 1200)) {
+        await sleep(220);
+        if (!selected() || !active()) { stable = 0; last = ''; continue; }
         const finalTheme = liveTheme(n);
-        const finalSig = themeSig(finalTheme);
-        if (finalSig !== last) {
-          stable = 0;
-          last = finalSig;
-          if (finalSig !== prevSig) changed = true;
-          continue;
-        }
-        return finalTheme;
+        if (themeSig(finalTheme) !== sg) { stable = 0; last = ''; changed = false; continue; }
+        return { ...finalTheme, name: n };
       }
     }
     return null;
@@ -1586,12 +1581,17 @@ ${last && !m.user ? '<div class="swipe_right fa-solid fa-chevron-right"></div>' 
     if (scanning) { scanning = false; return; }
     await loadSnaps(); await loadThemeData();
     const orig = curTheme();
-    let todo = themes().filter(n => n && n !== orig && !isFull(getTheme(n)));
+    const all = [...new Set(themes().filter(n => n && n !== orig))];
+    let todo = all.filter(n => !isFull(getTheme(n)));
     let force = false;
-    if (!todo.length) {
+    const cached = all.filter(n => isFull(getTheme(n)));
+    if (cached.length && P.confirm(`检测到已有 ${cached.length} 套美化的预览记录。若之前出现过名字和图片对不上，建议清除旧记录并全部重新读取。\n\n现在重新扫描全部 ${all.length} 套吗？`)) {
+      snaps.clear(); themeCache.clear(); await idb.clear();
+      todo = all; force = true;
+    } else if (!todo.length) {
       if (!P.confirm('所有美化都已记录过了。\n要清空记录并全部重新扫描吗？')) return;
-      snaps.clear(); await idb.clear();
-      todo = themes().filter(n => n && n !== orig); force = true;
+      snaps.clear(); themeCache.clear(); await idb.clear();
+      todo = all; force = true;
     }
     return runCapture(todo, force ? {} : {
       ask: (c, o) => `将逐个切换 ${c} 套美化来读取样式（每套约 0.5~1 秒），期间界面会闪动，结束后自动切回「${o}」。\n\n注意：当前美化里没保存的修改会丢失，请先在酒馆里保存。继续？`,
@@ -1671,7 +1671,7 @@ ${last && !m.user ? '<div class="swipe_right fa-solid fa-chevron-right"></div>' 
     pvPlace(); pvInfo(); pvFrames();
   }
   async function openPv() {
-    const names = themes().filter(Boolean);
+    const names = [...new Set(themes().filter(Boolean))];
     if (!names.length) return toast('还没有美化可预览', 'warning');
     if (PV.open) return;
     PV.generation++; PV.direction = 1;
