@@ -1091,7 +1091,7 @@
   // ---------- 预览：3D 翻页 ----------
   // 为了不卡：同一时间最多只画 左/中/右 三张（沙箱 iframe，无脚本），其余只是空壳；
   // 切换动画只用 transform（GPU），iframe 在动画开始后才分批创建；滑远了的会被回收
-  const PV = { open: false, ready: false, list: [], idx: 0, cards: new Map(), tm: 0, css: null, cssUrl: '', sig: '', err: '', nss: 0, lk: '', last: 0 };
+  const PV = { open: false, ready: false, list: [], idx: 0, cards: new Map(), tm: 0, generation: 0, direction: 1, css: null, cssUrl: '', sig: '', err: '', nss: 0, lk: '', last: 0 };
   const pvStage = pv.querySelector('.stage');
   const pvCards = pv.querySelector('.cards');
   const pvRange = pv.querySelector('input[type=range]');
@@ -1104,8 +1104,8 @@
   // 主题数据：内存 themeCache + IndexedDB 快照（刷新不丢，容量远大于 localStorage）
   let themeFetching = null;
   let scanning = false;
-  const nkey = s => '~' + String(s ?? '').trim().toLowerCase();
-  const getTheme = n => themeCache.get(n) ?? themeCache.get(nkey(n));
+  // 美化名称严格区分大小写，避免不同名称命中同一份缓存
+  const getTheme = n => themeCache.get(String(n ?? ''));
   const looksTheme = t => t && typeof t === 'object' && !Array.isArray(t) && t.name != null;
   const toThemes = v => {
     if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return []; } }
@@ -1156,7 +1156,7 @@
     if (!isFull(t) || t.name == null) return;
     const k = String(t.name);
     if (!force && snaps.has(k)) return; // 实测记录不被接口数据覆盖
-    themeCache.set(k, t); themeCache.set(nkey(k), t);
+    themeCache.set(k, t);
   }
   const putThemes = list => list.map(unwrap).forEach(t => putTheme(t));
   let snapsP = null;
@@ -1178,7 +1178,7 @@
     const have = new Set(themes());
     [...snaps.keys()].forEach(n => {
       if (have.has(n)) return;
-      snaps.delete(n); themeCache.delete(n); themeCache.delete(nkey(n)); idb.del(n);
+      snaps.delete(n); themeCache.delete(n); idb.del(n);
     });
   }
   let modP = null;
@@ -1428,22 +1428,34 @@ ${last && !m.user ? '<div class="swipe_right fa-solid fa-chevron-right"></div>' 
     el.className = 'cd';
     el.dataset.p = i - PV.idx;
     el.dataset.i = i;
+    el.dataset.name = PV.list[i];
     el.innerHTML = `<div class="ld">${esc(PV.list[i])}<small>加载中…</small></div>`;
     return el;
   }
-  // 只保留 当前±2 的卡片；已经画好的 iframe 不会因为滑动被销毁（避免反复重建造成卡顿/闪屏）
+  // 只保留当前卡片和左右邻卡，减少手机同时布局及绘制的 iframe 数量
   function pvPlace() {
-    for (const [i, el] of PV.cards) if (Math.abs(i - PV.idx) > 2) { el.remove(); PV.cards.delete(i); }
-    for (let i = PV.idx - 2; i <= PV.idx + 2; i++) {
+    for (const [i, el] of PV.cards) {
+      if (Math.abs(i - PV.idx) > 1 || el.dataset.name !== PV.list[i]) {
+        el.remove(); PV.cards.delete(i);
+      }
+    }
+    for (let i = PV.idx - 1; i <= PV.idx + 1; i++) {
       if (i < 0 || i >= PV.list.length) continue;
       let el = PV.cards.get(i);
-      if (!el) { el = pvCard(i); PV.cards.set(i, el); pvCards.appendChild(el); }
+      if (!el || el.dataset.name !== PV.list[i]) {
+        el?.remove();
+        el = pvCard(i); PV.cards.set(i, el); pvCards.appendChild(el);
+      }
       el.dataset.p = i - PV.idx;
     }
   }
   const idle = fn => (P.requestIdleCallback ? P.requestIdleCallback(fn, { timeout: 800 }) : setTimeout(fn, 60));
-  function pvMount(el, i) {
-    const t = themeObj(PV.list[i]);
+  function pvMount(el, i, expectedName) {
+    const name = expectedName ?? PV.list[i];
+    if (!PV.open || !el?.isConnected || PV.cards.get(i) !== el ||
+        PV.list[i] !== name || el.dataset.name !== name) return;
+    const t = themeObj(name);
+    if (!t || String(t.name) !== name || !isFull(t)) return;
     const f = D.createElement('iframe');
     f.setAttribute('sandbox', 'allow-same-origin'); // 不允许脚本：美化 CSS 只能改样式
     f.tabIndex = -1;
@@ -1451,7 +1463,6 @@ ${last && !m.user ? '<div class="swipe_right fa-solid fa-chevron-right"></div>' 
     const doc = f.contentDocument;
     if (!doc) return f.remove();
     doc.open(); doc.write(pvDoc(t)); doc.close();
-    // 外链 @import（在线字体等）后插入，慢或被墙也不会卡住整个预览
     const imp = splitImports(String(t.custom_css ?? '')).imports;
     if (imp) { const s = doc.createElement('style'); s.textContent = imp; doc.head.prepend(s); }
     const pin = () => { const c = f.isConnected && f.contentDocument?.getElementById('chat'); if (c) c.scrollTop = c.scrollHeight; };
@@ -1459,8 +1470,10 @@ ${last && !m.user ? '<div class="swipe_right fa-solid fa-chevron-right"></div>' 
     [300, 1200].forEach(ms => setTimeout(pin, ms));
     let shown = false;
     const show = () => {
-      if (shown) return; shown = true;
+      if (shown || !f.isConnected || PV.cards.get(i) !== el || el.dataset.name !== name) return;
+      shown = true;
       P.requestAnimationFrame(() => {
+        if (!f.isConnected || PV.cards.get(i) !== el || el.dataset.name !== name) return;
         pin(); f.classList.add('ready');
         setTimeout(() => { const ld = el.querySelector('.ld'); if (ld) ld.style.display = 'none'; }, 320);
       });
@@ -1547,6 +1560,7 @@ ${last && !m.user ? '<div class="swipe_right fa-solid fa-chevron-right"></div>' 
       P.__bgmgr_swap = false; scanning = false;
       btn.textContent = '扫描全部';
       toast(`已记录 ${done} 套${fail ? '，失败 ' + fail : ''}，已切回「${orig}」`, fail ? (done ? 'warning' : 'error') : 'success');
+      PV.generation++;
       PV.cards.forEach(el => { delete el.dataset.miss; delete el.dataset.busy; });
       stats();
       if (PV.open) { PV.ready = true; pvInfo(); pvFrames(true); }
@@ -1574,28 +1588,38 @@ ${last && !m.user ? '<div class="swipe_right fa-solid fa-chevron-right"></div>' 
     return runCapture([n], { ask: (c, o) => `将临时切换到「${n}」读取样式，然后自动切回「${o}」。\n当前美化里没保存的修改会丢失。继续？` });
   }
 
-  // 滑动稳定后再逐张补画：当前 → 右 → 左；每张都放到空闲时刻，不堵住动画
+  // 当前卡片优先；异步补全完成后再次核对索引、名称和卡片身份，杜绝旧请求串位
   function pvStep() {
     if (!PV.open || !PV.ready || scanning) return;
-    for (const i of [PV.idx, PV.idx + 1, PV.idx - 1, PV.idx + 2, PV.idx - 2]) {
+    const order = [PV.idx, PV.idx + PV.direction, PV.idx - PV.direction];
+    for (const i of order) {
+      if (i < 0 || i >= PV.list.length) continue;
       const el = PV.cards.get(i);
       if (!el || el.dataset.busy || el.dataset.miss || el.querySelector('iframe')) continue;
       const name = PV.list[i];
-      el.dataset.busy = '1';
+      const token = String(PV.generation);
+      el.dataset.busy = token;
       ensureFull(name).catch(e => console.warn('[Philia] 补全美化数据失败', e)).then(() => {
-        if (!PV.open || !PV.ready || !el.isConnected) { delete el.dataset.busy; return; }
-        if (name === curTheme() || isFull(getTheme(name))) {
+        const valid = () => PV.open && PV.ready && !scanning &&
+          PV.generation === Number(token) && PV.list[i] === name &&
+          PV.cards.get(i) === el && el.isConnected && el.dataset.name === name;
+        if (!valid()) {
+          if (el.dataset.busy === token) delete el.dataset.busy;
+          return;
+        }
+        if (name === curTheme() || (isFull(getTheme(name)) && String(getTheme(name).name) === name)) {
           idle(() => {
-            delete el.dataset.busy;
-            if (Date.now() - PV.last < 320) { PV.tm = setTimeout(pvStep, 320); return; } // 还在滑动：先不画，免得卡住动画
-            if (PV.open && el.isConnected && !scanning && !el.querySelector('iframe')) {
-              try { pvMount(el, i); } catch (e) { console.warn('[Philia] 预览渲染失败', e); }
-            }
+            if (el.dataset.busy === token) delete el.dataset.busy;
+            if (!valid()) return;
+            if (Date.now() - PV.last < 240) { PV.tm = setTimeout(pvStep, 260); return; }
+            try { pvMount(el, i, name); } catch (e) { console.warn('[Philia] 预览渲染失败', e); }
             pvInfo();
-            PV.tm = setTimeout(pvStep, 140);
+            PV.tm = setTimeout(pvStep, 100);
           });
         } else {
-          delete el.dataset.busy; el.dataset.miss = '1';
+          if (el.dataset.busy === token) delete el.dataset.busy;
+          if (!valid()) return;
+          el.dataset.miss = '1';
           const sm = el.querySelector('.ld small'); if (sm) sm.textContent = '未记录样式';
           pvInfo();
           PV.tm = setTimeout(pvStep, 60);
@@ -1627,13 +1651,15 @@ ${last && !m.user ? '<div class="swipe_right fa-solid fa-chevron-right"></div>' 
     if (!PV.open) return;
     i = Math.max(0, Math.min(PV.list.length - 1, i));
     if (i === PV.idx) return;
-    PV.idx = i; PV.last = Date.now();
+    PV.direction = i > PV.idx ? 1 : -1;
+    PV.idx = i; PV.last = Date.now(); PV.generation++;
     pvPlace(); pvInfo(); pvFrames();
   }
   async function openPv() {
     const names = themes().filter(Boolean);
     if (!names.length) return toast('还没有美化可预览', 'warning');
     if (PV.open) return;
+    PV.generation++; PV.direction = 1;
     PV.list = names; PV.ready = false; modP = null;
     PV.idx = Math.max(0, names.indexOf(curTheme()));
     PV.open = true;
@@ -1642,13 +1668,13 @@ ${last && !m.user ? '<div class="swipe_right fa-solid fa-chevron-right"></div>' 
     pvLayout(); pvPlace(); pvInfo();
     await loadThemeData();
     if (!PV.open) return;
-    PV.ready = true;
+    PV.generation++; PV.ready = true;
     pvInfo();
     pvFrames(true);
   }
   function closePv() {
     if (!PV.open) return;
-    PV.open = false; PV.ready = false;
+    PV.open = false; PV.ready = false; PV.generation++;
     clearTimeout(PV.tm);
     pv.classList.remove('open');
     pvCards.innerHTML = '';
