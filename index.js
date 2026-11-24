@@ -1242,7 +1242,7 @@
     t.custom_css = pu.custom_css ?? D.getElementById('customCSS')?.value ?? D.getElementById('custom-style')?.textContent ?? '';
     return t;
   }
-  const themeSig = t => JSON.stringify([...Object.values(PV_COLOR_VARS).map(f => t[f]), ...PV_KEYS.map(k => t[k]), String(t.custom_css ?? '').length, String(t.custom_css ?? '').slice(0, 80)]);
+  const themeSig = t => JSON.stringify([...Object.values(PV_COLOR_VARS).map(f => t[f]), ...PV_KEYS.map(k => t[k]), String(t.custom_css ?? '')]);
   const themeObj = name => (name === curTheme() ? liveTheme(name) : getTheme(name) ?? { name });
 
   // 把当前美化的实时样式记一份（要连续两次读到一样才算数，避免读到切换到一半的状态）
@@ -1524,7 +1524,22 @@ ${last && !m.user ? '<div class="swipe_right fa-solid fa-chevron-right"></div>' 
       const live = liveTheme(n), sg = themeSig(live);
       if (sg !== prevSig) changed = true;
       if (sg === last) stable++; else { stable = 0; last = sg; }
-      if (stable >= 3 && (changed || Date.now() - t0 > 900)) { await sleep(120); return liveTheme(n); }
+      if (stable >= 3 && (changed || Date.now() - t0 > 900)) {
+        // 切换动画结束后再做最后一次核验，避免把上一套或切换中的样式记到当前名称下
+        await sleep(160);
+        if (s.value !== n) { stable = 0; continue; }
+        const finalPu = puNow();
+        if (finalPu.theme !== undefined && finalPu.theme !== n) { stable = 0; continue; }
+        const finalTheme = liveTheme(n);
+        const finalSig = themeSig(finalTheme);
+        if (finalSig !== last) {
+          stable = 0;
+          last = finalSig;
+          if (finalSig !== prevSig) changed = true;
+          continue;
+        }
+        return finalTheme;
+      }
     }
     return null;
   }
