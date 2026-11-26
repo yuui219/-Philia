@@ -414,6 +414,12 @@
   #${ID}-panel .particle-choice{display:flex;align-items:center;justify-content:center;gap:5px;min-height:32px;padding:5px 5px;border-radius:10px;background:var(--card);border:1px solid var(--line);color:var(--ink);font-size:10.5px;cursor:pointer;user-select:none}
   #${ID}-panel .particle-choice.active{background:var(--acc2);border-color:var(--acc);font-weight:650}
   #${ID}-panel .particle-status{font-size:10px;color:var(--mut);text-align:center;margin-top:8px}
+  #${ID}-panel .particle-tune{margin-top:12px;padding:10px 11px;border-radius:12px;background:rgba(255,255,255,.42);border:1px solid var(--line)}
+  #${ID}-panel .particle-tune-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;font-size:11px;color:var(--ink)}
+  #${ID}-panel .particle-tune-row{display:grid;grid-template-columns:48px 1fr 34px;align-items:center;gap:8px;margin:8px 0;font-size:10px;color:var(--mut)}
+  #${ID}-panel .particle-tune-row input{width:100%;min-width:0;height:18px;accent-color:var(--acc);margin:0;padding:0}
+  #${ID}-panel .particle-tune-row output{font-size:10px;text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
+  #${ID}-panel .particle-tune-reset{font-size:10px;color:var(--mut);cursor:pointer;padding:3px 6px;border-radius:8px;background:var(--card)}
   #${ID}-panel .translate-set{padding:11px}
   #${ID}-panel .translate-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
   #${ID}-panel .tt-switch{position:relative;display:inline-block;flex:none;width:44px;height:25px}
@@ -433,6 +439,15 @@
   try { particleEffect = P.localStorage.getItem(PARTICLE_KEY) || 'none'; } catch {}
   if (!['none', ...PARTICLE_TYPES.map(x => x[0])].includes(particleEffect)) particleEffect = 'none';
   const particleRandom = (a, b) => a + Math.random() * (b - a);
+  const PARTICLE_TUNE_KEY = 'philia_particle_tune_v1';
+  const PARTICLE_TUNE_DEFAULT = { density: 100, size: 100, opacity: 100, speed: 100 };
+  let particleTune = { ...PARTICLE_TUNE_DEFAULT };
+  try { particleTune = { ...PARTICLE_TUNE_DEFAULT, ...JSON.parse(P.localStorage.getItem(PARTICLE_TUNE_KEY) || '{}') }; } catch {}
+  const saveParticleTune = () => { try { P.localStorage.setItem(PARTICLE_TUNE_KEY, JSON.stringify(particleTune)); } catch {} };
+  const particleBaseDensity = (type, w, h) => type === 'rain'
+    ? Math.max(62, Math.min(105, Math.round(w * h / 8200)))
+    : type === 'bubbles' ? Math.max(38, Math.min(66, Math.round(w * h / 12500)))
+    : Math.max(85, Math.min(190, Math.round(w * h / 5600)));
   function stopParticleEffect() {
     if (particleFrame) P.cancelAnimationFrame(particleFrame);
     particleFrame = 0; particleItems = [];
@@ -465,11 +480,7 @@
       particleCanvas.height = Math.round(height * dpr);
       particleCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       // 手机屏幕面积较小，旧版 24~30 片会让屏幕中央显得空；提高密度并铺满全屏。
-      const density = type === 'rain'
-        ? Math.max(62, Math.min(105, Math.round(width * height / 8200)))
-        : type === 'bubbles'
-          ? Math.max(38, Math.min(66, Math.round(width * height / 12500)))
-          : Math.max(85, Math.min(190, Math.round(width * height / 5600)));
+      const density = Math.max(1, Math.round(particleBaseDensity(type, width, height) * particleTune.density / 100));
       particleItems = Array.from({ length: density }, (_, i) => {
         const q = makeParticle(true);
         // 泡泡初始时按屏幕高度分层铺开，避免随机堆在底部或中段。
@@ -499,30 +510,36 @@
       const ctx = particleCtx;
       ctx.clearRect(0, 0, width, height);
       const t = (P.performance && P.performance.now ? P.performance.now() : Date.now()) * .001;
+      const speedScale = particleTune.speed / 100;
+      const sizeScale = particleTune.size / 100;
+      const opacityScale = particleTune.opacity / 100;
+      const targetCount = Math.max(1, Math.round(particleBaseDensity(type, width, height) * particleTune.density / 100));
+      if (particleItems.length < targetCount) particleItems.push(makeParticle(true));
+      else if (particleItems.length > targetCount) particleItems.length = targetCount;
       for (const q of particleItems) {
         if (type === 'snow') {
-          q.sway += .009; q.x += q.vx + Math.sin(q.sway) * .22; q.y += q.vy;
-          ctx.globalAlpha = q.alpha; ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = q.blur + 1; ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+          q.sway += .009 * speedScale; q.x += (q.vx + Math.sin(q.sway) * .22) * speedScale; q.y += q.vy * speedScale;
+          ctx.globalAlpha = q.alpha * opacityScale; ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = q.blur + 1; ctx.beginPath(); ctx.arc(q.x, q.y, q.r * sizeScale, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
           if (q.y > height + 8) Object.assign(q, makeParticle(false));
           if (q.x < -8) q.x = width + 5; else if (q.x > width + 8) q.x = -5;
         } else if (type === 'rain') {
-          q.x += q.vx; q.y += q.vy;
-          ctx.globalAlpha = q.alpha; ctx.strokeStyle = 'rgba(116,151,174,.62)'; ctx.lineWidth = particleRandom(.65, .95); ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(q.x + q.vx * 1.45, q.y + q.len); ctx.stroke();
-          if (q.y > height + q.len) Object.assign(q, makeParticle(false));
+          q.x += q.vx * speedScale; q.y += q.vy * speedScale;
+          ctx.globalAlpha = q.alpha * opacityScale; ctx.strokeStyle = 'rgba(116,151,174,.62)'; ctx.lineWidth = particleRandom(.65, .95) * sizeScale; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(q.x + q.vx * 1.45, q.y + q.len * sizeScale); ctx.stroke();
+          if (q.y > height + q.len * sizeScale) Object.assign(q, makeParticle(false));
         } else if (type === 'bubbles') {
-          q.sway += .018; q.x += q.vx + Math.sin(q.sway) * .24; q.y -= q.vy;
+          q.sway += .018 * speedScale; q.x += (q.vx + Math.sin(q.sway) * .24) * speedScale; q.y -= q.vy * speedScale;
           // 轻量半透明泡泡：降低描边和填充对比，避免遮挡聊天内容。
-          ctx.globalAlpha = q.alpha; ctx.strokeStyle = 'rgba(112,151,173,.58)'; ctx.lineWidth = 1.05; ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2); ctx.stroke();
-          ctx.globalAlpha = q.alpha * .14; ctx.fillStyle = 'rgba(125,174,198,.58)'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r * .78, 0, Math.PI * 2); ctx.fill();
-          ctx.globalAlpha = Math.min(.52, q.alpha * .82); ctx.strokeStyle = 'rgba(255,255,255,.88)'; ctx.lineWidth = .9; ctx.beginPath(); ctx.arc(q.x - q.r * .12, q.y - q.r * .12, q.r * .68, Math.PI * 1.08, Math.PI * 1.72); ctx.stroke();
-          ctx.globalAlpha = q.alpha * .52; ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.beginPath(); ctx.arc(q.x - q.r * .3, q.y - q.r * .34, Math.max(1.2, q.r * .19), 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = q.alpha * opacityScale; ctx.strokeStyle = 'rgba(112,151,173,.58)'; ctx.lineWidth = 1.05 * sizeScale; ctx.beginPath(); ctx.arc(q.x, q.y, q.r * sizeScale, 0, Math.PI * 2); ctx.stroke();
+          ctx.globalAlpha = q.alpha * .14 * opacityScale; ctx.fillStyle = 'rgba(125,174,198,.58)'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r * .78 * sizeScale, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = Math.min(.52, q.alpha * .82 * opacityScale); ctx.strokeStyle = 'rgba(255,255,255,.88)'; ctx.lineWidth = .9 * sizeScale; ctx.beginPath(); ctx.arc(q.x - q.r * .12 * sizeScale, q.y - q.r * .12 * sizeScale, q.r * .68 * sizeScale, Math.PI * 1.08, Math.PI * 1.72); ctx.stroke();
+          ctx.globalAlpha = q.alpha * .52 * opacityScale; ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.beginPath(); ctx.arc(q.x - q.r * .3 * sizeScale, q.y - q.r * .34 * sizeScale, Math.max(1.2, q.r * .19 * sizeScale), 0, Math.PI * 2); ctx.fill();
           if (q.y < -q.r - 5) Object.assign(q, makeParticle(false));
           if (q.x < -15) q.x = width + 10; else if (q.x > width + 15) q.x = -10;
         } else if (type === 'fireflies') {
-          q.phase += q.pulse; q.x += q.vx + Math.sin(t + q.phase) * .22; q.y += q.vy + Math.cos(t * .8 + q.phase) * .18;
+          q.phase += q.pulse * speedScale; q.x += (q.vx + Math.sin(t + q.phase) * .22) * speedScale; q.y += (q.vy + Math.cos(t * .8 + q.phase) * .18) * speedScale;
           const glow = .18 + (Math.sin(q.phase) + 1) * .32;
-          ctx.globalAlpha = glow; ctx.fillStyle = '#dfff9b'; ctx.shadowColor = '#dfff9b'; ctx.shadowBlur = 8;
-          ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+          ctx.globalAlpha = glow * opacityScale; ctx.fillStyle = '#dfff9b'; ctx.shadowColor = '#dfff9b'; ctx.shadowBlur = 8;
+          ctx.beginPath(); ctx.arc(q.x, q.y, q.r * sizeScale, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
           if (q.x < -10) q.x = width + 8; else if (q.x > width + 10) q.x = -8;
           if (q.y < -10) q.y = height + 8; else if (q.y > height + 10) q.y = -8;
         }
@@ -1219,7 +1236,11 @@
       </div>`)}
       ${section('particles', 'GLOBAL EFFECTS · 全局特效', `<div class="card set">
         <div class="particle-grid">${PARTICLE_TYPES.map(([key, icon, label]) => `<div class="particle-choice ${particleEffect === key ? 'active' : ''}" data-particle="${key}"><span>${icon}</span><span>${label}</span></div>`).join('')}</div>
-        <div class="particle-status">${particleEffect === 'none' ? '当前未开启特效 · 再点当前特效即可关闭' : `当前效果：${PARTICLE_TYPES.find(x => x[0] === particleEffect)?.[2] || '已开启'} · 再点一次即可关闭`}</div>
+        <div class="particle-status">${particleEffect === 'none' ? '当前未开启特效 · 先选择一种特效再调整' : `当前效果：${PARTICLE_TYPES.find(x => x[0] === particleEffect)?.[2] || '已开启'} · 再点一次即可关闭`}</div>
+        <div class="particle-tune">
+          <div class="particle-tune-head"><b>特效自定义</b><span class="particle-tune-reset" data-particle-reset>恢复默认</span></div>
+          ${[['density','密度'],['size','大小'],['opacity','透明度'],['speed','速度']].map(([k,l]) => `<label class="particle-tune-row"><span>${l}</span><input type="range" min="25" max="200" step="5" value="${particleTune[k]}" data-particle-tune="${k}"><output data-particle-value="${k}">${particleTune[k]}%</output></label>`).join('')}
+        </div>
       </div>`)}
       ${section('translate', '点击翻译', `<div class="card set translate-set">
         <div class="translate-row"><div><b>点击打开翻译</b><div class="script-note">开启后，括号内译文会隐藏；点击原文即可切换显示译文。</div></div>
@@ -1279,6 +1300,18 @@
     });
     view.querySelectorAll('[data-particle]').forEach(choice => {
       choice.onclick = () => setParticleEffect(choice.dataset.particle);
+    });
+    view.querySelectorAll('[data-particle-tune]').forEach(slider => {
+      slider.oninput = () => {
+        const key = slider.dataset.particleTune;
+        particleTune[key] = +slider.value;
+        saveParticleTune();
+        const out = view.querySelector(`[data-particle-value="${key}"]`);
+        if (out) out.textContent = slider.value + '%';
+      };
+    });
+    view.querySelector('[data-particle-reset]')?.addEventListener('click', () => {
+      particleTune = { ...PARTICLE_TUNE_DEFAULT }; saveParticleTune(); renderSet();
     });
     const translateToggle = view.querySelector('[data-translate-toggle]');
     const translateStatus = view.querySelector('[data-translate-status]');
