@@ -482,7 +482,7 @@
       const y = initial ? particleRandom(0, height || P.innerHeight || 700) : (type === 'bubbles' ? (height || 700) + 15 : -15);
       if (type === 'snow') return { x, y, r: particleRandom(1.1, 3.2), vy: particleRandom(.28, .88), vx: particleRandom(-.32, .32), sway: particleRandom(0, 6.28), alpha: particleRandom(.36, .76), blur: particleRandom(.6, 2.2) };
       if (type === 'rain') return { x, y, len: particleRandom(7, 15), vy: particleRandom(7, 11), vx: particleRandom(-1.35, -.65), alpha: particleRandom(.22, .38) };
-      if (type === 'bubbles') return { x, y, r: particleRandom(3, 7), vy: particleRandom(.58, 1.08), vx: particleRandom(-.2, .2), sway: particleRandom(0, 6.28), alpha: particleRandom(.22, .42) };
+      if (type === 'bubbles') return { x, y, r: particleRandom(4.8, 8.2), vy: particleRandom(.58, 1.08), vx: particleRandom(-.2, .2), sway: particleRandom(0, 6.28), alpha: particleRandom(.29, .47) };
       return { x, y: initial ? particleRandom(0, height || 700) : particleRandom(0, height || 700), r: particleRandom(1.2, 2.8), vx: particleRandom(-.35, .35), vy: particleRandom(-.3, .3), phase: particleRandom(0, 6.28), pulse: particleRandom(.012, .027) };
     }
     resizeParticles();
@@ -512,10 +512,10 @@
         } else if (type === 'bubbles') {
           q.sway += .018; q.x += q.vx + Math.sin(q.sway) * .24; q.y -= q.vy;
           // 轻量半透明泡泡：降低描边和填充对比，避免遮挡聊天内容。
-          ctx.globalAlpha = q.alpha; ctx.strokeStyle = 'rgba(120,155,174,.48)'; ctx.lineWidth = .85; ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2); ctx.stroke();
-          ctx.globalAlpha = q.alpha * .10; ctx.fillStyle = 'rgba(125,174,198,.55)'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r * .78, 0, Math.PI * 2); ctx.fill();
-          ctx.globalAlpha = Math.min(.42, q.alpha * .72); ctx.strokeStyle = 'rgba(255,255,255,.82)'; ctx.lineWidth = .8; ctx.beginPath(); ctx.arc(q.x - q.r * .12, q.y - q.r * .12, q.r * .68, Math.PI * 1.08, Math.PI * 1.72); ctx.stroke();
-          ctx.globalAlpha = q.alpha * .42; ctx.fillStyle = 'rgba(255,255,255,.88)'; ctx.beginPath(); ctx.arc(q.x - q.r * .3, q.y - q.r * .34, Math.max(1.2, q.r * .19), 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = q.alpha; ctx.strokeStyle = 'rgba(112,151,173,.58)'; ctx.lineWidth = 1.05; ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2); ctx.stroke();
+          ctx.globalAlpha = q.alpha * .14; ctx.fillStyle = 'rgba(125,174,198,.58)'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r * .78, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = Math.min(.52, q.alpha * .82); ctx.strokeStyle = 'rgba(255,255,255,.88)'; ctx.lineWidth = .9; ctx.beginPath(); ctx.arc(q.x - q.r * .12, q.y - q.r * .12, q.r * .68, Math.PI * 1.08, Math.PI * 1.72); ctx.stroke();
+          ctx.globalAlpha = q.alpha * .52; ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.beginPath(); ctx.arc(q.x - q.r * .3, q.y - q.r * .34, Math.max(1.2, q.r * .19), 0, Math.PI * 2); ctx.fill();
           if (q.y < -q.r - 5) Object.assign(q, makeParticle(false));
           if (q.x < -15) q.x = width + 10; else if (q.x > width + 15) q.x = -10;
         } else if (type === 'fireflies') {
