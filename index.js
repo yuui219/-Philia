@@ -454,7 +454,7 @@
     particleCtx = particleCanvas.getContext('2d', { alpha: true });
     if (!particleCtx) { particleCanvas.remove(); particleCanvas = null; particleEffect = 'none'; return; }
     let width = 0, height = 0, dpr = 1;
-    let snowLedges = [], waterStains = [], lastLedgeScan = 0, lastWaterDrop = 0;
+    let waterStains = [], lastWaterDrop = 0;
     const resizeParticles = () => {
       if (!particleCanvas) return;
       const vv = P.visualViewport;
@@ -468,18 +468,28 @@
       particleCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       // 手机屏幕面积较小，旧版 24~30 片会让屏幕中央显得空；提高密度并铺满全屏。
       const density = type === 'water'
-        ? Math.max(34, Math.min(72, Math.round(width * height / 14500)))
-        : Math.max(85, Math.min(190, Math.round(width * height / 5600)));
-      particleItems = Array.from({ length: density }, () => makeParticle(true));
-      if (type === 'snowdrift') { snowLedges = []; lastLedgeScan = 0; }
+        ? Math.max(190, Math.min(320, Math.round(width * height / 3200)))
+        : type === 'rain'
+          ? Math.max(190, Math.min(380, Math.round(width * height / 2300)))
+          : type === 'bubbles'
+            ? Math.max(110, Math.min(230, Math.round(width * height / 3800)))
+            : type === 'snowdrift'
+              ? Math.max(105, Math.min(190, Math.round(width * height / 5200)))
+              : Math.max(85, Math.min(190, Math.round(width * height / 5600)));
+      particleItems = Array.from({ length: density }, (_, i) => {
+        const q = makeParticle(true);
+        // 泡泡初始时按屏幕高度分层铺开，避免随机堆在底部或中段。
+        if (type === 'bubbles') q.y = ((i + Math.random()) / density) * height;
+        return q;
+      });
       if (type === 'water') { waterStains = []; lastWaterDrop = 0; }
     };
     function makeParticle(initial) {
       const x = particleRandom(0, width || P.innerWidth || 360);
       const y = initial ? particleRandom(0, height || P.innerHeight || 700) : (type === 'bubbles' ? (height || 700) + 15 : -15);
-      if (type === 'snow' || type === 'snowdrift') return { x, y, r: particleRandom(type === 'snowdrift' ? .8 : 1.1, type === 'snowdrift' ? 2.1 : 3.5), vy: particleRandom(.55, 1.75), vx: particleRandom(-.45, .45), sway: particleRandom(0, 6.28), alpha: particleRandom(.42, .95) };
-      if (type === 'rain' || type === 'water') return { x, y, len: particleRandom(type === 'water' ? 4 : 8, type === 'water' ? 10 : 19), vy: particleRandom(type === 'water' ? 4 : 7, type === 'water' ? 8 : 13), vx: particleRandom(-1.8, -.8), alpha: particleRandom(type === 'water' ? .10 : .16, type === 'water' ? .25 : .42) };
-      if (type === 'bubbles') return { x, y, r: particleRandom(3, 10), vy: particleRandom(.45, 1.35), vx: particleRandom(-.35, .35), sway: particleRandom(0, 6.28), alpha: particleRandom(.2, .5) };
+      if (type === 'snow' || type === 'snowdrift') return { x, y, r: particleRandom(type === 'snowdrift' ? .9 : 1.1, type === 'snowdrift' ? 2.8 : 3.5), vy: particleRandom(type === 'snowdrift' ? .28 : .55, type === 'snowdrift' ? 1.05 : 1.75), vx: particleRandom(-.5, .5), sway: particleRandom(0, 6.28), alpha: particleRandom(type === 'snowdrift' ? .32 : .42, .92), blur: particleRandom(1, type === 'snowdrift' ? 5 : 3) };
+      if (type === 'rain' || type === 'water') return { x, y, len: particleRandom(type === 'water' ? 12 : 13, type === 'water' ? 28 : 27), vy: particleRandom(type === 'water' ? 10 : 10, type === 'water' ? 19 : 17), vx: particleRandom(type === 'water' ? -3.2 : -2.4, type === 'water' ? -1.1 : -1.0), alpha: particleRandom(type === 'water' ? .24 : .48, type === 'water' ? .62 : .82) };
+      if (type === 'bubbles') return { x, y, r: particleRandom(4, 11), vy: particleRandom(.82, 1.65), vx: particleRandom(-.28, .28), sway: particleRandom(0, 6.28), alpha: particleRandom(.48, .78) };
       return { x, y: initial ? particleRandom(0, height || 700) : particleRandom(0, height || 700), r: particleRandom(1.2, 2.8), vx: particleRandom(-.35, .35), vy: particleRandom(-.3, .3), phase: particleRandom(0, 6.28), pulse: particleRandom(.012, .027) };
     }
     resizeParticles();
@@ -489,78 +499,39 @@
       if (D.hidden) { if (particleFrame) P.cancelAnimationFrame(particleFrame); particleFrame = 0; }
       else if (!particleFrame) particleFrame = P.requestAnimationFrame(drawParticles);
     };
-    function scanSnowLedges(now) {
-      if (type !== 'snowdrift' || now - lastLedgeScan < 2600) return;
-      lastLedgeScan = now;
-      // 通过可见 DOM 元素的矩形上沿近似识别横向承接面，不依赖某个特定美化的类名。
-      const nodes = D.querySelectorAll('div,section,article,header,nav,button,textarea,input,.mes,.mes_block,.mes_text');
-      let added = 0;
-      for (const el of nodes) {
-        if (added >= 5) break;
-        if (!el.isConnected || el === particleCanvas || el.closest('#bgmgr-root')) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width < Math.max(92, width * .24) || r.height < 12 || r.height > 190) continue;
-        if (r.bottom < 0 || r.top > height || r.left > width || r.right < 0) continue;
-        const cs = P.getComputedStyle(el);
-        if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) < .08) continue;
-        // 避免在纯文字小行、整屏容器和明显不可见的元素上铺雪。
-        if (r.width > width * .98 && r.height > height * .72) continue;
-        const sig = [Math.round(r.left / 8), Math.round(r.top / 8), Math.round(r.width / 12)].join(':');
-        if (snowLedges.some(x => x.sig === sig && now - x.born < 4200)) continue;
-        const count = Math.random() < .55 ? 1 : 2;
-        for (let i = 0; i < count; i++) {
-          const w = particleRandom(Math.min(24, r.width * .18), Math.min(68, r.width * .42));
-          snowLedges.push({
-            sig, x: Math.max(0, Math.min(width - w, r.left + particleRandom(0, Math.max(1, r.width - w)))),
-            y: Math.max(0, r.top + particleRandom(-1, 2)), w,
-            h: particleRandom(2, 4.8), born: now, life: particleRandom(4300, 6800)
-          });
-        }
-        added++;
-      }
-      snowLedges = snowLedges.filter(x => now - x.born < x.life);
-      if (snowLedges.length > 28) snowLedges.splice(0, snowLedges.length - 28);
-    }
-    function drawSnowLedges(ctx, now) {
-      scanSnowLedges(now);
-      for (const q of snowLedges) {
-        const age = now - q.born;
-        const fade = Math.min(1, age / 500, (q.life - age) / 900);
-        if (fade <= 0) continue;
-        ctx.globalAlpha = Math.max(0, fade) * .82;
-        ctx.fillStyle = '#fff';
-        ctx.shadowColor = '#fff';
-        ctx.shadowBlur = 3;
-        ctx.beginPath();
-        ctx.moveTo(q.x, q.y + q.h);
-        ctx.quadraticCurveTo(q.x + q.w * .18, q.y - q.h * .25, q.x + q.w * .38, q.y + q.h * .45);
-        ctx.quadraticCurveTo(q.x + q.w * .66, q.y - q.h * .4, q.x + q.w, q.y + q.h * .55);
-        ctx.lineTo(q.x + q.w, q.y + q.h + 1);
-        ctx.lineTo(q.x, q.y + q.h + 1);
-        ctx.closePath(); ctx.fill();
-      }
-      ctx.shadowBlur = 0;
-    }
+    // 积雪采用第一张参考图的玻璃表面飘雪感：不再扫描 DOM 或绘制悬空横条，
+    // 粒子始终在视口内自然飘落，页面滚动时不会留下错误的“雪堆”。
     function drawWaterStains(ctx, now) {
-      if (now - lastWaterDrop > particleRandom(520, 1050)) {
+      // 大雨同时伴随玻璃水珠：持续生成、缓慢下滑、逐渐变淡。
+      if (now - lastWaterDrop > particleRandom(150, 320)) {
         lastWaterDrop = now;
-        waterStains.push({ x: particleRandom(8, Math.max(9, width - 8)), y: particleRandom(25, Math.max(26, height - 55)), len: particleRandom(16, 48), born: now, life: particleRandom(2200, 3900), w: particleRandom(1.2, 3.2) });
+        if (waterStains.length < 22) waterStains.push({
+          x: particleRandom(8, Math.max(9, width - 8)), y: particleRandom(-12, height * .82),
+          len: particleRandom(18, 62), born: now, life: particleRandom(3000, 6200),
+          w: particleRandom(2.2, 5.2), speed: particleRandom(.28, 1.05), sway: particleRandom(-.35, .35),
+          r: particleRandom(2.2, 4.8)
+        });
       }
-      waterStains = waterStains.filter(q => now - q.born < q.life);
+      waterStains = waterStains.filter(q => now - q.born < q.life && q.y < height + 80);
       for (const q of waterStains) {
         const age = now - q.born;
-        const fade = Math.min(1, age / 300, (q.life - age) / 700);
+        q.y += q.speed; q.x += q.sway * .12;
+        const fade = Math.min(1, age / 240, (q.life - age) / 900);
         if (fade <= 0) continue;
-        const a = Math.max(0, fade) * .34;
-        ctx.globalAlpha = a;
-        const g = ctx.createLinearGradient(q.x, q.y, q.x + q.w, q.y + q.len);
-        g.addColorStop(0, 'rgba(255,255,255,.05)');
-        g.addColorStop(.45, 'rgba(196,226,245,.72)');
-        g.addColorStop(1, 'rgba(255,255,255,.08)');
-        ctx.strokeStyle = g; ctx.lineWidth = q.w; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.bezierCurveTo(q.x - 2, q.y + q.len * .32, q.x + 3, q.y + q.len * .68, q.x + 1, q.y + q.len); ctx.stroke();
-        ctx.fillStyle = 'rgba(225,244,255,.48)';
-        ctx.beginPath(); ctx.ellipse(q.x + 1, q.y + q.len, q.w * 1.3, q.w * 2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.save(); ctx.globalAlpha = Math.max(0, fade) * .72;
+        // 透明水痕主体与侧边高光，做出玻璃上真实水滴的折射感。
+        const grad = ctx.createLinearGradient(q.x - q.w, q.y, q.x + q.w, q.y + q.len);
+        grad.addColorStop(0, 'rgba(255,255,255,.08)');
+        grad.addColorStop(.28, 'rgba(210,235,250,.38)');
+        grad.addColorStop(.55, 'rgba(255,255,255,.72)');
+        grad.addColorStop(1, 'rgba(190,220,240,.12)');
+        ctx.strokeStyle = grad; ctx.lineWidth = q.w; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(q.x, q.y);
+        ctx.bezierCurveTo(q.x - q.w, q.y + q.len * .28, q.x + q.w, q.y + q.len * .68, q.x, q.y + q.len); ctx.stroke();
+        ctx.globalAlpha = Math.max(0, fade) * .82;
+        ctx.fillStyle = 'rgba(255,255,255,.76)'; ctx.shadowColor = 'rgba(210,238,255,.9)'; ctx.shadowBlur = 5;
+        ctx.beginPath(); ctx.ellipse(q.x, q.y + q.len, q.r * .72, q.r * 1.35, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0; ctx.restore();
       }
     }
     function drawParticles() {
@@ -572,18 +543,21 @@
       const t = (P.performance && P.performance.now ? P.performance.now() : Date.now()) * .001;
       for (const q of particleItems) {
         if (type === 'snow' || type === 'snowdrift') {
-          q.sway += .012; q.x += q.vx + Math.sin(q.sway) * .28; q.y += q.vy;
-          ctx.globalAlpha = q.alpha; ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 5; ctx.beginPath(); ctx.arc(q.x, q.y, q.r + .35, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+          q.sway += type === 'snowdrift' ? .008 : .012; q.x += q.vx + Math.sin(q.sway) * (type === 'snowdrift' ? .42 : .28); q.y += q.vy;
+          ctx.globalAlpha = q.alpha; ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = type === 'snowdrift' ? q.blur + 3 : 5; ctx.beginPath(); ctx.arc(q.x, q.y, q.r + (type === 'snowdrift' ? .5 : .35), 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
           if (q.y > height + 8) Object.assign(q, makeParticle(false));
           if (q.x < -8) q.x = width + 5; else if (q.x > width + 8) q.x = -5;
         } else if (type === 'rain' || type === 'water') {
           q.x += q.vx; q.y += q.vy;
-          ctx.globalAlpha = q.alpha; ctx.strokeStyle = '#b9d9f5'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(q.x + q.vx * 1.8, q.y + q.len); ctx.stroke();
+          ctx.globalAlpha = q.alpha; ctx.strokeStyle = type === 'water' ? 'rgba(205,230,250,.78)' : 'rgba(91,132,166,.78)'; ctx.lineWidth = type === 'water' ? particleRandom(.8, 1.5) : particleRandom(1.15, 1.75); ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(q.x + q.vx * (type === 'water' ? 1.45 : 1.8), q.y + q.len); ctx.stroke();
           if (q.y > height + q.len) Object.assign(q, makeParticle(false));
         } else if (type === 'bubbles') {
-          q.sway += .018; q.x += q.vx + Math.sin(q.sway) * .3; q.y -= q.vy;
-          ctx.globalAlpha = q.alpha; ctx.strokeStyle = '#d9f4f5'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2); ctx.stroke();
-          ctx.globalAlpha = q.alpha * .45; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(q.x - q.r * .3, q.y - q.r * .35, Math.max(1, q.r * .18), 0, Math.PI * 2); ctx.fill();
+          q.sway += .018; q.x += q.vx + Math.sin(q.sway) * .24; q.y -= q.vy;
+          // 日间浅色背景也能辨认：外缘使用低饱和蓝灰描边，内部保留柔和玻璃高光。
+          ctx.globalAlpha = q.alpha; ctx.strokeStyle = 'rgba(91,137,166,.78)'; ctx.lineWidth = 1.25; ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2); ctx.stroke();
+          ctx.globalAlpha = q.alpha * .22; ctx.fillStyle = 'rgba(125,174,198,.8)'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r * .78, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = Math.min(.9, q.alpha * .9); ctx.strokeStyle = 'rgba(255,255,255,.96)'; ctx.lineWidth = 1.35; ctx.beginPath(); ctx.arc(q.x - q.r * .12, q.y - q.r * .12, q.r * .68, Math.PI * 1.08, Math.PI * 1.72); ctx.stroke();
+          ctx.globalAlpha = q.alpha * .75; ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.beginPath(); ctx.arc(q.x - q.r * .3, q.y - q.r * .34, Math.max(1.2, q.r * .19), 0, Math.PI * 2); ctx.fill();
           if (q.y < -q.r - 5) Object.assign(q, makeParticle(false));
           if (q.x < -15) q.x = width + 10; else if (q.x > width + 15) q.x = -10;
         } else if (type === 'fireflies') {
@@ -595,7 +569,6 @@
           if (q.y < -10) q.y = height + 8; else if (q.y > height + 10) q.y = -8;
         }
       }
-      if (type === 'snowdrift') drawSnowLedges(ctx, P.performance.now());
       if (type === 'water') drawWaterStains(ctx, P.performance.now());
       ctx.globalAlpha = 1;
       particleFrame = P.requestAnimationFrame(drawParticles);
