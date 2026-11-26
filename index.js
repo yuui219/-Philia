@@ -8,6 +8,9 @@
   const ID = 'bgmgr';
   const KEY = 'bgmgr_theme_map';
   const CFG = 'bgmgr_cfg';
+  const SCRIPT_KEY = 'bgmgr_click_translate_code';
+  const FOLD_KEY = 'bgmgr_settings_folds';
+  const SCRIPT_DEFAULT = "// ===== 点击翻译（隐藏括号译文）=====\n// 用法：酒馆助手 → 脚本库 → 导入 click-translate.json\n(function () {\n  const P = window.parent || window;\n  const D = P.document;\n  if (P.__ttDestroy) { try { P.__ttDestroy(); } catch (e) {} }\n\n  const KEY = 'tt_click_translate_v1';\n  const DEFAULT = { enabled: true, pairs: [['（', '）'], ['(', ')']] };\n  const OPENERS = ['“', '「', '『', '\"'];\n  const TRAIL = /[”」』\"\\s]*$/;\n\n  let S;\n  try { S = Object.assign({}, DEFAULT, JSON.parse(P.localStorage.getItem(KEY) || '{}')); }\n  catch (e) { S = JSON.parse(JSON.stringify(DEFAULT)); }\n  const save = () => { try { P.localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };\n  const esc = s => s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n\n  // ---------- 样式 ----------\n  const style = D.createElement('style');\n  style.setAttribute('data-tt', '1');\n  style.textContent = `\n  tt-seg.tt-seg{display:inline !important;cursor:pointer;\n    color:inherit !important;-webkit-text-fill-color:currentcolor !important;\n    font:inherit !important;letter-spacing:inherit;text-shadow:inherit;opacity:inherit;\n    text-decoration:none !important;border:0 !important;outline:none !important;\n    box-shadow:none !important;background:none !important;padding:0;margin:0;\n    -webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;\n    -webkit-user-select:none;user-select:none}\n\n  #tt-panel{position:fixed;z-index:99999;left:50%;top:18%;transform:translateX(-50%);\n    width:min(88vw,330px);box-sizing:border-box;padding:14px 16px 16px;display:none;\n    color:#3b3f45;font-size:14px;line-height:1.5;\n    background:rgba(244,245,247,.58);\n    -webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);\n    border:1px solid rgba(255,255,255,.7);border-radius:18px;\n    box-shadow:0 8px 32px rgba(60,70,90,.18),inset 0 1px 0 rgba(255,255,255,.6)}\n  #tt-panel *{box-sizing:border-box}\n  #tt-panel .tt-head{display:flex;justify-content:space-between;align-items:center;\n    font-weight:600;font-size:15px;margin-bottom:10px;cursor:move;touch-action:none;user-select:none}\n  #tt-panel .tt-x{cursor:pointer;padding:0 4px;color:#7b818a;font-size:16px}\n  #tt-panel .tt-row{display:flex;justify-content:space-between;align-items:center;margin:6px 0 10px}\n  #tt-panel .tt-sub{font-size:12px;color:#7b818a;margin:6px 0 6px}\n  #tt-panel .tt-item{display:flex;justify-content:space-between;align-items:center;\n    padding:6px 10px;margin-bottom:6px;border-radius:10px;background:rgba(255,255,255,.55)}\n  #tt-panel .tt-item b{font-weight:500;letter-spacing:1px}\n  #tt-panel .tt-del{cursor:pointer;color:#9aa0a8;padding:0 4px}\n  #tt-panel .tt-add{display:flex;gap:6px;margin-top:8px}\n  #tt-panel input[type=text]{flex:1;min-width:0;width:100%;height:34px;padding:0 8px;font-size:16px;\n    color:#3b3f45;background:rgba(255,255,255,.7);border:1px solid rgba(200,205,212,.8);\n    border-radius:9px;outline:none;box-shadow:none}\n  #tt-panel button{height:34px;padding:0 12px;font-size:13px;color:#3b3f45;cursor:pointer;\n    background:rgba(255,255,255,.75);border:1px solid rgba(200,205,212,.8);border-radius:9px;\n    box-shadow:none;margin:0}\n  #tt-panel #tt-all{width:100%;margin-top:12px}\n  #tt-panel .tt-sw{position:relative;width:42px;height:24px;display:inline-block}\n  #tt-panel .tt-sw input{opacity:0;width:0;height:0;position:absolute}\n  #tt-panel .tt-sw i{position:absolute;inset:0;border-radius:12px;background:rgba(170,176,185,.6);transition:.2s}\n  #tt-panel .tt-sw i::after{content:\"\";position:absolute;left:2px;top:2px;width:20px;height:20px;\n    border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:.2s}\n  #tt-panel .tt-sw input:checked + i{background:rgba(110,160,130,.85)}\n  #tt-panel .tt-sw input:checked + i::after{transform:translateX(18px)}\n  `;\n  D.head.appendChild(style);\n\n  // ---------- 核心：转换 ----------\n  let observer = null, timer = null;\n  const chatEl = () => D.getElementById('chat');\n\n  function buildRe() {\n    const ps = S.pairs.filter(p => p[0] && p[1]);\n    if (!ps.length) return null;\n    return new RegExp(ps.map(p => esc(p[0]) + '([\\\\s\\\\S]+?)' + esc(p[1])).join('|'), 'g');\n  }\n\n  function convert(node, re) {\n    const s = node.nodeValue;\n    re.lastIndex = 0;\n    let m, last = 0, hit = false;\n    const frag = D.createDocumentFragment();\n    while ((m = re.exec(s))) {\n      let pi = -1;\n      for (let i = 0; i < S.pairs.length; i++) if (m[i + 1] !== undefined) { pi = i; break; }\n      const valid = S.pairs.filter(p => p[0] && p[1]);\n      const pair = valid[pi];\n      const end = m.index + m[0].length;\n      const chunk = s.slice(last, m.index);\n      const tail = chunk.match(TRAIL)[0];\n      const core = chunk.slice(0, chunk.length - tail.length);\n      let idx = -1;\n      for (const q of OPENERS) idx = Math.max(idx, core.lastIndexOf(q));\n      const prefix = core.slice(0, idx + 1);\n      const orig = core.slice(idx + 1);\n      if (!pair || !orig.trim()) { frag.append(s.slice(last, end)); last = end; continue; }\n      const span = D.createElement('tt-seg');\n      span.className = 'tt-seg';\n      span.textContent = orig;\n      span.dataset.o = orig; span.dataset.t = m[pi + 1];\n      span.dataset.w1 = pair[0]; span.dataset.w2 = pair[1]; span.dataset.s = '0';\n      frag.append(prefix, span, tail);\n      last = end; hit = true;\n    }\n    if (!hit) return;\n    frag.append(s.slice(last));\n    node.replaceWith(frag);\n  }\n\n  function processAll() {\n    const chat = chatEl();\n    if (!chat || !S.enabled) return;\n    const re = buildRe();\n    if (!re) return;\n    chat.querySelectorAll('.mes_text').forEach(mes => {\n      const walker = D.createTreeWalker(mes, 4 /* SHOW_TEXT */, {\n        acceptNode(n) {\n          if (!n.nodeValue || !n.nodeValue.trim()) return 2;\n          const p = n.parentElement;\n          if (!p || p.closest('.tt-seg,code,pre,script,style,textarea')) return 2;\n          return 1;\n        }\n      });\n      const nodes = [];\n      while (walker.nextNode()) nodes.push(walker.currentNode);\n      nodes.forEach(n => convert(n, re));\n    });\n  }\n\n  function revertAll() {\n    const chat = chatEl();\n    if (!chat) return;\n    const parents = new Set();\n    chat.querySelectorAll('.tt-seg').forEach(sp => {\n      const d = sp.dataset;\n      parents.add(sp.parentNode);\n      sp.replaceWith(D.createTextNode(d.o + d.w1 + d.t + d.w2));\n    });\n    parents.forEach(p => p && p.normalize && p.normalize());\n  }\n\n  function pause(fn) {\n    if (observer) observer.disconnect();\n    try { fn(); } finally { attach(); }\n  }\n\n  function attach() {\n    const chat = chatEl();\n    if (!chat || !observer) return;\n    observer.observe(chat, { childList: true, subtree: true, characterData: true });\n  }\n\n  function schedule() {\n    clearTimeout(timer);\n    timer = setTimeout(() => pause(processAll), 250); // 防抖，流式输出时不会反复闪\n  }\n\n  observer = new P.MutationObserver(schedule);\n\n  function refresh() { pause(() => { revertAll(); processAll(); }); }\n\n  // 点击切换\n  function onClick(e) {\n    const seg = e.target.closest && e.target.closest('.tt-seg');\n    if (!seg) return;\n    const on = seg.dataset.s === '1';\n    pause(() => {\n      seg.textContent = on ? seg.dataset.o : seg.dataset.t;\n      seg.dataset.s = on ? '0' : '1';\n    });\n  }\n  D.addEventListener('click', onClick);\n\n  // ---------- 悬浮面板 ----------\n  const panel = D.createElement('div');\n  panel.id = 'tt-panel';\n  panel.setAttribute('data-tt', '1');\n  panel.innerHTML = `\n    <div class=\"tt-head\"><span>点击翻译</span><span class=\"tt-x\">✕</span></div>\n    <div class=\"tt-row\"><span>启用脚本</span>\n      <label class=\"tt-sw\"><input type=\"checkbox\" id=\"tt-en\"><i></i></label></div>\n    <div class=\"tt-sub\">翻译包裹符号</div>\n    <div id=\"tt-list\"></div>\n    <div class=\"tt-add\">\n      <input type=\"text\" id=\"tt-o\" placeholder=\"开头\">\n      <input type=\"text\" id=\"tt-c\" placeholder=\"结尾\">\n      <button id=\"tt-addbtn\">添加</button>\n    </div>\n    <button id=\"tt-all\">展开 / 收起全部译文</button>`;\n  D.body.appendChild(panel);\n  const $ = id => panel.querySelector(id);\n\n  function renderList() {\n    const list = $('#tt-list');\n    list.textContent = '';\n    S.pairs.forEach((p, i) => {\n      const row = D.createElement('div'); row.className = 'tt-item';\n      const b = D.createElement('b'); b.textContent = p[0] + ' … ' + p[1];\n      const x = D.createElement('span'); x.className = 'tt-del'; x.textContent = '✕';\n      x.onclick = () => { S.pairs.splice(i, 1); save(); renderList(); refresh(); };\n      row.append(b, x); list.appendChild(row);\n    });\n  }\n\n  $('#tt-en').checked = !!S.enabled;\n  $('#tt-en').onchange = e => {\n    S.enabled = e.target.checked; save();\n    if (S.enabled) refresh(); else pause(revertAll);\n  };\n  $('#tt-addbtn').onclick = () => {\n    const o = $('#tt-o').value.trim(), c = $('#tt-c').value.trim();\n    if (!o || !c) return;\n    if (!S.pairs.some(p => p[0] === o && p[1] === c)) S.pairs.push([o, c]);\n    $('#tt-o').value = ''; $('#tt-c').value = '';\n    save(); renderList(); refresh();\n  };\n  $('#tt-all').onclick = () => {\n    const segs = [...(chatEl() || D).querySelectorAll('.tt-seg')];\n    const toOn = segs.some(s => s.dataset.s !== '1');\n    pause(() => segs.forEach(s => {\n      s.textContent = toOn ? s.dataset.t : s.dataset.o;\n      s.dataset.s = toOn ? '1' : '0';\n    }));\n  };\n  $('.tt-x').onclick = () => (panel.style.display = 'none');\n\n  // 拖动\n  (function () {\n    const head = panel.querySelector('.tt-head');\n    let sx, sy, ox, oy, drag = false;\n    head.addEventListener('pointerdown', e => {\n      if (e.target.classList.contains('tt-x')) return;\n      const r = panel.getBoundingClientRect();\n      drag = true; sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;\n      panel.style.transform = 'none'; panel.style.left = ox + 'px'; panel.style.top = oy + 'px';\n      head.setPointerCapture(e.pointerId);\n    });\n    head.addEventListener('pointermove', e => {\n      if (!drag) return;\n      panel.style.left = ox + e.clientX - sx + 'px';\n      panel.style.top = oy + e.clientY - sy + 'px';\n    });\n    head.addEventListener('pointerup', () => (drag = false));\n  })();\n\n  function togglePanel() {\n    panel.style.display = panel.style.display === 'block' ? 'none' : 'block';\n  }\n\n  // ---------- 脚本按钮（显示在快捷回复栏） ----------\n  const BTN = '点击翻译';\n  P.__ttToggle = togglePanel;\n  try {\n    if (typeof eventOn === 'function' && typeof getButtonEvent === 'function')\n      eventOn(getButtonEvent(BTN), () => P.__ttToggle && P.__ttToggle());\n  } catch (e) {}\n\n  // ---------- 启动 ----------\n  renderList();\n  const boot = setInterval(() => {\n    if (chatEl()) { clearInterval(boot); attach(); pause(processAll); }\n  }, 500);\n\n  try {\n    const ctx = P.SillyTavern.getContext();\n    const ev = ctx.eventSource, T = ctx.event_types;\n    [T.CHAT_CHANGED, T.MESSAGE_UPDATED, T.MESSAGE_SWIPED, T.CHARACTER_MESSAGE_RENDERED,\n     T.USER_MESSAGE_RENDERED].forEach(t => t && ev.on(t, schedule));\n  } catch (e) {}\n\n  P.__ttDestroy = function () {\n    clearInterval(boot); clearTimeout(timer);\n    if (observer) observer.disconnect();\n    D.removeEventListener('click', onClick);\n    pause = function () {};\n    try { revertAll(); } catch (e) {}\n    D.querySelectorAll('[data-tt]').forEach(e => e.remove());\n    delete P.__ttDestroy; delete P.__ttToggle;\n  };\n  window.addEventListener('pagehide', () => P.__ttDestroy && P.__ttDestroy());\n})();\n";
 
   // ---------- 清理旧实例 ----------
   D.getElementById(ID + '-root')?.remove();
@@ -400,6 +403,17 @@
   #${ID}-panel .pv .pnm span{display:block;font-size:10.5px;color:var(--mut);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #${ID}-panel .pv input[type=range]{width:100%;accent-color:var(--acc);height:16px;margin:0}
   #${ID}-panel .pv .two .pill{padding:7px 2px;font-size:11.5px}
+  `;
+  st.textContent += `
+  #${ID}-panel .fold-head{cursor:pointer;user-select:none;min-height:30px;padding:5px 9px;border-radius:12px;background:rgba(255,255,255,.28)}
+  #${ID}-panel .fold-head:active{opacity:.72}
+  #${ID}-panel .fold-mark{font-size:16px!important;color:var(--mut);min-width:20px;text-align:center}
+  #${ID}-panel .fold-body{overflow:hidden}
+  #${ID}-panel .script-set{padding:10px;gap:9px}
+  #${ID}-panel .script-note{font-size:10px;line-height:1.55;color:var(--mut)}
+  #${ID}-panel .script-editor{display:block;width:100%;height:260px;min-height:160px;resize:vertical;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--bg);color:var(--ink);font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;outline:none}
+  #${ID}-panel .script-actions{display:flex;gap:8px}
+  #${ID}-panel .script-actions .pill{flex:1;text-align:center}
   `;
   D.head.appendChild(st);
 
@@ -1040,29 +1054,51 @@
     ['bl', '模糊', 0, 100, v => blurPx(v) + 'px'],
   ];
   function renderSet() {
+    let folds = {};
+    try { folds = JSON.parse(P.localStorage.getItem(FOLD_KEY) || '{}') || {}; } catch {}
+    const savedScript = (() => { try { return P.localStorage.getItem(SCRIPT_KEY) ?? SCRIPT_DEFAULT; } catch { return SCRIPT_DEFAULT; } })();
+    const section = (key, title, body) => `
+      <div class="sec fold-head" data-fold="${key}"><b>${title}</b><span class="fold-mark">${folds[key] ? '−' : '+'}</span></div>
+      <div class="fold-body" data-fold-body="${key}" style="display:${folds[key] ? 'block' : 'none'}">${body}</div>`;
     view.innerHTML = `
-      <div class="sec"><b>Profile</b><span class="clr" style="cursor:pointer">清除头像</span></div>
+      <div class="sec"><b>PROFILE</b><span class="clr" style="cursor:pointer">清除头像</span></div>
       <div class="card set"><div class="prof">
         <div class="av2" style="${cfg.avatar ? `background-image:url(${cfg.avatar})` : ''}">${cfg.avatar ? '' : '＋'}</div>
         <div class="col"><input type="text" data-k="title" placeholder="标题" value="${esc(cfg.title)}"><input type="text" data-k="sub" placeholder="签名" value="${esc(cfg.sub)}"></div>
       </div></div>
-      <div class="sec"><b>Tavern background</b><span class="rsall" style="cursor:pointer">全部重置</span></div>
-      <div class="card set">
+      ${section('bgfx', 'TAVERN BACKGROUND', `<div class="card set">
         ${FX.map(([k, l, mn, mx, f]) => `<div><label><span>${l}</span><span><span data-v="${k}">${f(cfg.bfx[k])}</span><i class="rs" data-rs="${k}">↺</i></span></label>
           <input type="range" min="${mn}" max="${mx}" value="${cfg.bfx[k]}" data-fx="${k}"></div>`).join('')}
-      </div>
-      <div class="sec"><b>Appearance</b></div>
-      <div class="card set">
+        <div class="pill ghost" data-reset-fx="all">全部重置</div>
+      </div>`)}
+      ${section('appearance', 'APPEARANCE', `<div class="card set">
         <div class="sw">${COLORS.map(c => `<i data-c="${c}" class="${c === cfg.accent ? 'on' : ''}" style="background:${c}"></i>`).join('')}
           <input type="color" value="${cfg.accent}" data-a="color" style="width:28px;height:24px;border:0;background:none;padding:0"></div>
         <div class="two"><div class="pill ${cfg.dark ? 'ghost' : ''}" data-a="light">浅色</div><div class="pill ${cfg.dark ? '' : 'ghost'}" data-a="dark">深色</div></div>
         <div class="pill ghost" data-a="reset">恢复默认外观</div>
-      </div>`;
+      </div>`)}
+      ${section('translate', 'SCRIPT · 点击翻译', `<div class="card set script-set">
+        <div class="script-note">内置你提供的「点击翻译」脚本。可以在这里直接编辑并保存；点击「保存并运行」才会启动脚本。</div>
+        <textarea class="script-editor" spellcheck="false" aria-label="点击翻译脚本编辑器">${esc(savedScript)}</textarea>
+        <div class="script-actions"><div class="pill ghost" data-script="reset">恢复原始脚本</div><div class="pill ghost" data-script="save">保存</div><div class="pill" data-script="run">保存并运行</div></div>
+      </div>`)}
+    `;
     view.querySelectorAll('input[type=text]').forEach(i => {
       i.oninput = () => { cfg[i.dataset.k] = i.value; setCfg(cfg); applyCfg(); };
     });
     view.querySelector('.av2').onclick = () => avInput.click();
     view.querySelector('.clr').onclick = () => { cfg.avatar = ''; setCfg(cfg); applyCfg(); renderSet(); };
+    view.querySelectorAll('.fold-head').forEach(head => {
+      head.onclick = () => {
+        const key = head.dataset.fold;
+        const body = view.querySelector(`[data-fold-body="${key}"]`);
+        const open = body.style.display === 'none';
+        body.style.display = open ? 'block' : 'none';
+        head.querySelector('.fold-mark').textContent = open ? '−' : '+';
+        folds[key] = open;
+        try { P.localStorage.setItem(FOLD_KEY, JSON.stringify(folds)); } catch {}
+      };
+    });
     const fx = k => FX.find(x => x[0] === k);
     const sync = k => {
       view.querySelector(`[data-v="${k}"]`).textContent = fx(k)[4](cfg.bfx[k]);
@@ -1072,9 +1108,11 @@
       i.oninput = () => { cfg.bfx[i.dataset.fx] = +i.value; setCfg(cfg); applyBgFx(); sync(i.dataset.fx); };
     });
     view.querySelectorAll('[data-rs]').forEach(i => {
-      i.onclick = () => { cfg.bfx[i.dataset.rs] = DEF.bfx[i.dataset.rs]; setCfg(cfg); applyBgFx(); sync(i.dataset.rs); };
+      i.onclick = e => { e.stopPropagation(); cfg.bfx[i.dataset.rs] = DEF.bfx[i.dataset.rs]; setCfg(cfg); applyBgFx(); sync(i.dataset.rs); };
     });
-    view.querySelector('.rsall').onclick = () => { cfg.bfx = { ...DEF.bfx }; setCfg(cfg); applyBgFx(); FX.forEach(x => sync(x[0])); };
+    view.querySelector('[data-reset-fx="all"]').onclick = () => {
+      cfg.bfx = { ...DEF.bfx }; setCfg(cfg); applyBgFx(); FX.forEach(x => sync(x[0]));
+    };
     view.querySelectorAll('[data-c]').forEach(i => (i.onclick = () => { cfg.accent = i.dataset.c; setCfg(cfg); applyCfg(); renderSet(); }));
     view.querySelector('[data-a=color]').oninput = e => { cfg.accent = e.target.value; setCfg(cfg); applyCfg(); };
     view.querySelectorAll('.pill[data-a]').forEach(b => {
@@ -1086,6 +1124,18 @@
         setCfg(cfg); applyCfg(); renderSet();
       };
     });
+    const editor = view.querySelector('.script-editor');
+    const saveScript = () => {
+      try { P.localStorage.setItem(SCRIPT_KEY, editor.value); toast('点击翻译脚本已保存', 'success'); return true; }
+      catch (e) { toast('脚本保存失败：本地存储不可用', 'error'); return false; }
+    };
+    view.querySelector('[data-script="save"]').onclick = saveScript;
+    view.querySelector('[data-script="reset"]').onclick = () => { editor.value = SCRIPT_DEFAULT; saveScript(); };
+    view.querySelector('[data-script="run"]').onclick = () => {
+      if (!saveScript()) return;
+      try { P.eval(editor.value); toast('点击翻译脚本已运行', 'success'); }
+      catch (e) { console.error('[Philia] 点击翻译脚本运行失败', e); toast('脚本运行失败：' + (e?.message || e), 'error'); }
+    };
   }
 
   // ---------- 预览：3D 翻页 ----------
