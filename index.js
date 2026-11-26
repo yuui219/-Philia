@@ -13,7 +13,8 @@
   const PARTICLE_KEY = 'bgmgr_global_particle_effect';
   const PARTICLE_TYPES = [
     ['snow', '❄️', '飘雪'], ['rain', '🌧️', '下雨'],
-    ['bubbles', '🫧', '泡泡'], ['fireflies', '✨', '萤火虫']
+    ['bubbles', '🫧', '泡泡'], ['fireflies', '✨', '萤火虫'],
+    ['snowdrift', '☃️', '积雪'], ['water', '💧', '水痕']
   ];
   const SCRIPT_DEFAULT = "// ===== 点击翻译（隐藏括号译文）=====\n// 用法：酒馆助手 → 脚本库 → 导入 click-translate.json\n(function () {\n  const P = window.parent || window;\n  const D = P.document;\n  if (P.__ttDestroy) { try { P.__ttDestroy(); } catch (e) {} }\n\n  const KEY = 'tt_click_translate_v1';\n  const DEFAULT = { enabled: false, pairs: [['（', '）'], ['(', ')']] };\n  const OPENERS = ['“', '「', '『', '\"'];\n  const TRAIL = /[”」』\"\\s]*$/;\n\n  let S;\n  try { S = Object.assign({}, DEFAULT, JSON.parse(P.localStorage.getItem(KEY) || '{}')); }\n  catch (e) { S = JSON.parse(JSON.stringify(DEFAULT)); }\n  const save = () => { try { P.localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };\n  const esc = s => s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n\n  // ---------- 样式 ----------\n  const style = D.createElement('style');\n  style.setAttribute('data-tt', '1');\n  style.textContent = `\n  tt-seg.tt-seg{display:inline !important;cursor:pointer;\n    color:inherit !important;-webkit-text-fill-color:currentcolor !important;\n    font:inherit !important;letter-spacing:inherit;text-shadow:inherit;opacity:inherit;\n    text-decoration:none !important;border:0 !important;outline:none !important;\n    box-shadow:none !important;background:none !important;padding:0;margin:0;\n    -webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;\n    -webkit-user-select:none;user-select:none}\n\n  #tt-panel{position:fixed;z-index:99999;left:50%;top:18%;transform:translateX(-50%);\n    width:min(88vw,330px);box-sizing:border-box;padding:14px 16px 16px;display:none;\n    color:#3b3f45;font-size:14px;line-height:1.5;\n    background:rgba(244,245,247,.58);\n    -webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);\n    border:1px solid rgba(255,255,255,.7);border-radius:18px;\n    box-shadow:0 8px 32px rgba(60,70,90,.18),inset 0 1px 0 rgba(255,255,255,.6)}\n  #tt-panel *{box-sizing:border-box}\n  #tt-panel .tt-head{display:flex;justify-content:space-between;align-items:center;\n    font-weight:600;font-size:15px;margin-bottom:10px;cursor:move;touch-action:none;user-select:none}\n  #tt-panel .tt-x{cursor:pointer;padding:0 4px;color:#7b818a;font-size:16px}\n  #tt-panel .tt-row{display:flex;justify-content:space-between;align-items:center;margin:6px 0 10px}\n  #tt-panel .tt-sub{font-size:12px;color:#7b818a;margin:6px 0 6px}\n  #tt-panel .tt-item{display:flex;justify-content:space-between;align-items:center;\n    padding:6px 10px;margin-bottom:6px;border-radius:10px;background:rgba(255,255,255,.55)}\n  #tt-panel .tt-item b{font-weight:500;letter-spacing:1px}\n  #tt-panel .tt-del{cursor:pointer;color:#9aa0a8;padding:0 4px}\n  #tt-panel .tt-add{display:flex;gap:6px;margin-top:8px}\n  #tt-panel input[type=text]{flex:1;min-width:0;width:100%;height:34px;padding:0 8px;font-size:16px;\n    color:#3b3f45;background:rgba(255,255,255,.7);border:1px solid rgba(200,205,212,.8);\n    border-radius:9px;outline:none;box-shadow:none}\n  #tt-panel button{height:34px;padding:0 12px;font-size:13px;color:#3b3f45;cursor:pointer;\n    background:rgba(255,255,255,.75);border:1px solid rgba(200,205,212,.8);border-radius:9px;\n    box-shadow:none;margin:0}\n  #tt-panel #tt-all{width:100%;margin-top:12px}\n  #tt-panel .tt-sw{position:relative;width:42px;height:24px;display:inline-block}\n  #tt-panel .tt-sw input{opacity:0;width:0;height:0;position:absolute}\n  #tt-panel .tt-sw i{position:absolute;inset:0;border-radius:12px;background:rgba(170,176,185,.6);transition:.2s}\n  #tt-panel .tt-sw i::after{content:\"\";position:absolute;left:2px;top:2px;width:20px;height:20px;\n    border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:.2s}\n  #tt-panel .tt-sw input:checked + i{background:rgba(110,160,130,.85)}\n  #tt-panel .tt-sw input:checked + i::after{transform:translateX(18px)}\n  `;\n  D.head.appendChild(style);\n\n  // ---------- 核心：转换 ----------\n  let observer = null, timer = null, domObserver = null, observedChat = null;\n  const chatEl = () => D.getElementById('chat');\n\n  function buildRe() {\n    const ps = S.pairs.filter(p => p[0] && p[1]);\n    if (!ps.length) return null;\n    return new RegExp(ps.map(p => esc(p[0]) + '([\\\\s\\\\S]+?)' + esc(p[1])).join('|'), 'g');\n  }\n\n  function convert(node, re) {\n    const s = node.nodeValue;\n    re.lastIndex = 0;\n    let m, last = 0, hit = false;\n    const frag = D.createDocumentFragment();\n    while ((m = re.exec(s))) {\n      let pi = -1;\n      for (let i = 0; i < S.pairs.length; i++) if (m[i + 1] !== undefined) { pi = i; break; }\n      const valid = S.pairs.filter(p => p[0] && p[1]);\n      const pair = valid[pi];\n      const end = m.index + m[0].length;\n      const chunk = s.slice(last, m.index);\n      const tail = chunk.match(TRAIL)[0];\n      const core = chunk.slice(0, chunk.length - tail.length);\n      let idx = -1;\n      for (const q of OPENERS) idx = Math.max(idx, core.lastIndexOf(q));\n      const prefix = core.slice(0, idx + 1);\n      const orig = core.slice(idx + 1);\n      if (!pair || !orig.trim()) { frag.append(s.slice(last, end)); last = end; continue; }\n      const span = D.createElement('tt-seg');\n      span.className = 'tt-seg';\n      span.textContent = orig;\n      span.dataset.o = orig; span.dataset.t = m[pi + 1];\n      span.dataset.w1 = pair[0]; span.dataset.w2 = pair[1]; span.dataset.s = '0';\n      frag.append(prefix, span, tail);\n      last = end; hit = true;\n    }\n    if (!hit) return;\n    frag.append(s.slice(last));\n    node.replaceWith(frag);\n  }\n\n  function processAll() {\n    const chat = chatEl();\n    if (!chat || !S.enabled) return;\n    const re = buildRe();\n    if (!re) return;\n    chat.querySelectorAll('.mes_text').forEach(mes => {\n      const walker = D.createTreeWalker(mes, 4 /* SHOW_TEXT */, {\n        acceptNode(n) {\n          if (!n.nodeValue || !n.nodeValue.trim()) return 2;\n          const p = n.parentElement;\n          if (!p || p.closest('.tt-seg,code,pre,script,style,textarea')) return 2;\n          return 1;\n        }\n      });\n      const nodes = [];\n      while (walker.nextNode()) nodes.push(walker.currentNode);\n      nodes.forEach(n => convert(n, re));\n    });\n  }\n\n  function revertAll() {\n    const chat = chatEl();\n    if (!chat) return;\n    const parents = new Set();\n    chat.querySelectorAll('.tt-seg').forEach(sp => {\n      const d = sp.dataset;\n      parents.add(sp.parentNode);\n      sp.replaceWith(D.createTextNode(d.o + d.w1 + d.t + d.w2));\n    });\n    parents.forEach(p => p && p.normalize && p.normalize());\n  }\n\n  function pause(fn) {\n    if (observer) observer.disconnect();\n    try { fn(); } finally { attach(); }\n  }\n\n  function attach() {\n    const chat = chatEl();\n    if (!chat || !observer) return false;\n    if (observedChat !== chat) { observer.disconnect(); observedChat = chat; }\n    observer.observe(chat, { childList: true, subtree: true, characterData: true });\n    return true;\n  }\n\n  // 监听酒馆延迟创建/替换聊天区，兼容手机端首屏加载。\n  domObserver = new P.MutationObserver(records => {\n    let relevant = false;\n    for (const r of records) {\n      const t = r.target && (r.target.nodeType === 1 ? r.target : r.target.parentElement);\n      if (t && (t.id === 'chat' || t.closest?.('#chat'))) { relevant = true; break; }\n      for (const n of r.addedNodes || []) {\n        if (n.nodeType === 1 && (n.id === 'chat' || n.matches?.('#chat, .mes_text') || n.querySelector?.('#chat, .mes_text'))) { relevant = true; break; }\n      }\n      if (relevant) break;\n    }\n    if (attach() && relevant && S.enabled) schedule();\n  });\n  try { domObserver.observe(D.documentElement, { childList: true, subtree: true }); } catch (e) {}\n\n  function schedule() {\n    clearTimeout(timer);\n    timer = setTimeout(() => pause(processAll), 250); // 防抖，流式输出时不会反复闪\n  }\n\n  observer = new P.MutationObserver(schedule);\n\n  function refresh() { pause(() => { revertAll(); processAll(); }); }\n\n  // 点击切换\n  function onClick(e) {\n    const seg = e.target.closest && e.target.closest('.tt-seg');\n    if (!seg) return;\n    const on = seg.dataset.s === '1';\n    pause(() => {\n      seg.textContent = on ? seg.dataset.o : seg.dataset.t;\n      seg.dataset.s = on ? '0' : '1';\n    });\n  }\n  D.addEventListener('click', onClick);\n\n  // ---------- 启动 ----------\n  const boot = setInterval(() => {\n    if (attach() && S.enabled) pause(processAll);\n  }, 500);\n\n  try {\n    const ctx = P.SillyTavern.getContext();\n    const ev = ctx.eventSource, T = ctx.event_types;\n    [T.CHAT_CHANGED, T.MESSAGE_UPDATED, T.MESSAGE_SWIPED, T.CHARACTER_MESSAGE_RENDERED,\n     T.USER_MESSAGE_RENDERED].forEach(t => t && ev.on(t, schedule));\n  } catch (e) {}\n\n  P.__ttDestroy = function () {\n    clearInterval(boot); clearTimeout(timer);\n    if (observer) observer.disconnect();\n    if (domObserver) domObserver.disconnect();\n    observedChat = null;\n    D.removeEventListener('click', onClick);\n    pause = function () {};\n    try { revertAll(); } catch (e) {}\n    D.querySelectorAll('[data-tt]').forEach(e => e.remove());\n    delete P.__ttDestroy; delete P.__ttToggle;\n  };\n  window.addEventListener('pagehide', () => P.__ttDestroy && P.__ttDestroy());\n  S.enabled = false;\n  save();\n  P.__philiaClickTranslate = {\n    setEnabled(enabled) {\n      S.enabled = !!enabled; save();\n      if (S.enabled) refresh(); else pause(revertAll);\n      return S.enabled;\n    },\n    getPairs() { return S.pairs.map(p => [...p]); },\n    addPair(open, close) {\n      open = String(open || '').trim(); close = String(close || '').trim();\n      if (!open || !close) return false;\n      if (!S.pairs.some(p => p[0] === open && p[1] === close)) S.pairs.push([open, close]);\n      save(); if (S.enabled) refresh(); return true;\n    },\n    removePair(index) {\n      if (!Number.isInteger(index) || index < 0 || index >= S.pairs.length) return false;\n      S.pairs.splice(index, 1); save(); if (S.enabled) refresh(); return true;\n    },\n    destroy() {\n      try { P.__ttDestroy && P.__ttDestroy(); } catch (e) {}\n      delete P.__philiaClickTranslate;\n    }\n  };\n})();\n";
   const GEN = (P.__bgmgr_gen = (P.__bgmgr_gen || 0) + 1); // 旧实例的扫描循环会据此自动退出
@@ -411,7 +412,7 @@
   `;
   st.textContent += `
   #${ID}-panel .particle-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-  #${ID}-panel .particle-choice{display:flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:8px 6px;border-radius:12px;background:var(--card);border:1px solid var(--line);color:var(--ink);font-size:12px;cursor:pointer;user-select:none}
+  #${ID}-panel .particle-choice{display:flex;align-items:center;justify-content:center;gap:5px;min-height:32px;padding:5px 5px;border-radius:10px;background:var(--card);border:1px solid var(--line);color:var(--ink);font-size:10.5px;cursor:pointer;user-select:none}
   #${ID}-panel .particle-choice.active{background:var(--acc2);border-color:var(--acc);font-weight:650}
   #${ID}-panel .particle-status{font-size:10px;color:var(--mut);text-align:center;margin-top:8px}
   #${ID}-panel .translate-set{padding:11px}
@@ -453,6 +454,7 @@
     particleCtx = particleCanvas.getContext('2d', { alpha: true });
     if (!particleCtx) { particleCanvas.remove(); particleCanvas = null; particleEffect = 'none'; return; }
     let width = 0, height = 0, dpr = 1;
+    let snowLedges = [], waterStains = [], lastLedgeScan = 0, lastWaterDrop = 0;
     const resizeParticles = () => {
       if (!particleCanvas) return;
       const vv = P.visualViewport;
@@ -464,14 +466,19 @@
       particleCanvas.width = Math.round(width * dpr);
       particleCanvas.height = Math.round(height * dpr);
       particleCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const density = Math.max(24, Math.min(95, Math.round(width * height / 11500)));
+      // 手机屏幕面积较小，旧版 24~30 片会让屏幕中央显得空；提高密度并铺满全屏。
+      const density = type === 'water'
+        ? Math.max(34, Math.min(72, Math.round(width * height / 14500)))
+        : Math.max(85, Math.min(190, Math.round(width * height / 5600)));
       particleItems = Array.from({ length: density }, () => makeParticle(true));
+      if (type === 'snowdrift') { snowLedges = []; lastLedgeScan = 0; }
+      if (type === 'water') { waterStains = []; lastWaterDrop = 0; }
     };
     function makeParticle(initial) {
       const x = particleRandom(0, width || P.innerWidth || 360);
       const y = initial ? particleRandom(0, height || P.innerHeight || 700) : (type === 'bubbles' ? (height || 700) + 15 : -15);
-      if (type === 'snow') return { x, y, r: particleRandom(1, 3.1), vy: particleRandom(.45, 1.55), vx: particleRandom(-.35, .35), sway: particleRandom(0, 6.28), alpha: particleRandom(.35, .85) };
-      if (type === 'rain') return { x, y, len: particleRandom(8, 19), vy: particleRandom(7, 13), vx: particleRandom(-1.8, -.8), alpha: particleRandom(.16, .42) };
+      if (type === 'snow' || type === 'snowdrift') return { x, y, r: particleRandom(type === 'snowdrift' ? .8 : 1.1, type === 'snowdrift' ? 2.1 : 3.5), vy: particleRandom(.55, 1.75), vx: particleRandom(-.45, .45), sway: particleRandom(0, 6.28), alpha: particleRandom(.42, .95) };
+      if (type === 'rain' || type === 'water') return { x, y, len: particleRandom(type === 'water' ? 4 : 8, type === 'water' ? 10 : 19), vy: particleRandom(type === 'water' ? 4 : 7, type === 'water' ? 8 : 13), vx: particleRandom(-1.8, -.8), alpha: particleRandom(type === 'water' ? .10 : .16, type === 'water' ? .25 : .42) };
       if (type === 'bubbles') return { x, y, r: particleRandom(3, 10), vy: particleRandom(.45, 1.35), vx: particleRandom(-.35, .35), sway: particleRandom(0, 6.28), alpha: particleRandom(.2, .5) };
       return { x, y: initial ? particleRandom(0, height || 700) : particleRandom(0, height || 700), r: particleRandom(1.2, 2.8), vx: particleRandom(-.35, .35), vy: particleRandom(-.3, .3), phase: particleRandom(0, 6.28), pulse: particleRandom(.012, .027) };
     }
@@ -482,6 +489,80 @@
       if (D.hidden) { if (particleFrame) P.cancelAnimationFrame(particleFrame); particleFrame = 0; }
       else if (!particleFrame) particleFrame = P.requestAnimationFrame(drawParticles);
     };
+    function scanSnowLedges(now) {
+      if (type !== 'snowdrift' || now - lastLedgeScan < 2600) return;
+      lastLedgeScan = now;
+      // 通过可见 DOM 元素的矩形上沿近似识别横向承接面，不依赖某个特定美化的类名。
+      const nodes = D.querySelectorAll('div,section,article,header,nav,button,textarea,input,.mes,.mes_block,.mes_text');
+      let added = 0;
+      for (const el of nodes) {
+        if (added >= 5) break;
+        if (!el.isConnected || el === particleCanvas || el.closest('#bgmgr-root')) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < Math.max(92, width * .24) || r.height < 12 || r.height > 190) continue;
+        if (r.bottom < 0 || r.top > height || r.left > width || r.right < 0) continue;
+        const cs = P.getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) < .08) continue;
+        // 避免在纯文字小行、整屏容器和明显不可见的元素上铺雪。
+        if (r.width > width * .98 && r.height > height * .72) continue;
+        const sig = [Math.round(r.left / 8), Math.round(r.top / 8), Math.round(r.width / 12)].join(':');
+        if (snowLedges.some(x => x.sig === sig && now - x.born < 4200)) continue;
+        const count = Math.random() < .55 ? 1 : 2;
+        for (let i = 0; i < count; i++) {
+          const w = particleRandom(Math.min(24, r.width * .18), Math.min(68, r.width * .42));
+          snowLedges.push({
+            sig, x: Math.max(0, Math.min(width - w, r.left + particleRandom(0, Math.max(1, r.width - w)))),
+            y: Math.max(0, r.top + particleRandom(-1, 2)), w,
+            h: particleRandom(2, 4.8), born: now, life: particleRandom(4300, 6800)
+          });
+        }
+        added++;
+      }
+      snowLedges = snowLedges.filter(x => now - x.born < x.life);
+      if (snowLedges.length > 28) snowLedges.splice(0, snowLedges.length - 28);
+    }
+    function drawSnowLedges(ctx, now) {
+      scanSnowLedges(now);
+      for (const q of snowLedges) {
+        const age = now - q.born;
+        const fade = Math.min(1, age / 500, (q.life - age) / 900);
+        if (fade <= 0) continue;
+        ctx.globalAlpha = Math.max(0, fade) * .82;
+        ctx.fillStyle = '#fff';
+        ctx.shadowColor = '#fff';
+        ctx.shadowBlur = 3;
+        ctx.beginPath();
+        ctx.moveTo(q.x, q.y + q.h);
+        ctx.quadraticCurveTo(q.x + q.w * .18, q.y - q.h * .25, q.x + q.w * .38, q.y + q.h * .45);
+        ctx.quadraticCurveTo(q.x + q.w * .66, q.y - q.h * .4, q.x + q.w, q.y + q.h * .55);
+        ctx.lineTo(q.x + q.w, q.y + q.h + 1);
+        ctx.lineTo(q.x, q.y + q.h + 1);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    }
+    function drawWaterStains(ctx, now) {
+      if (now - lastWaterDrop > particleRandom(520, 1050)) {
+        lastWaterDrop = now;
+        waterStains.push({ x: particleRandom(8, Math.max(9, width - 8)), y: particleRandom(25, Math.max(26, height - 55)), len: particleRandom(16, 48), born: now, life: particleRandom(2200, 3900), w: particleRandom(1.2, 3.2) });
+      }
+      waterStains = waterStains.filter(q => now - q.born < q.life);
+      for (const q of waterStains) {
+        const age = now - q.born;
+        const fade = Math.min(1, age / 300, (q.life - age) / 700);
+        if (fade <= 0) continue;
+        const a = Math.max(0, fade) * .34;
+        ctx.globalAlpha = a;
+        const g = ctx.createLinearGradient(q.x, q.y, q.x + q.w, q.y + q.len);
+        g.addColorStop(0, 'rgba(255,255,255,.05)');
+        g.addColorStop(.45, 'rgba(196,226,245,.72)');
+        g.addColorStop(1, 'rgba(255,255,255,.08)');
+        ctx.strokeStyle = g; ctx.lineWidth = q.w; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.bezierCurveTo(q.x - 2, q.y + q.len * .32, q.x + 3, q.y + q.len * .68, q.x + 1, q.y + q.len); ctx.stroke();
+        ctx.fillStyle = 'rgba(225,244,255,.48)';
+        ctx.beginPath(); ctx.ellipse(q.x + 1, q.y + q.len, q.w * 1.3, q.w * 2, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
     function drawParticles() {
       if (!particleCanvas || !particleCtx) return;
       particleFrame = 0;
@@ -490,12 +571,12 @@
       ctx.clearRect(0, 0, width, height);
       const t = (P.performance && P.performance.now ? P.performance.now() : Date.now()) * .001;
       for (const q of particleItems) {
-        if (type === 'snow') {
+        if (type === 'snow' || type === 'snowdrift') {
           q.sway += .012; q.x += q.vx + Math.sin(q.sway) * .28; q.y += q.vy;
           ctx.globalAlpha = q.alpha; ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 5; ctx.beginPath(); ctx.arc(q.x, q.y, q.r + .35, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
           if (q.y > height + 8) Object.assign(q, makeParticle(false));
           if (q.x < -8) q.x = width + 5; else if (q.x > width + 8) q.x = -5;
-        } else if (type === 'rain') {
+        } else if (type === 'rain' || type === 'water') {
           q.x += q.vx; q.y += q.vy;
           ctx.globalAlpha = q.alpha; ctx.strokeStyle = '#b9d9f5'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(q.x + q.vx * 1.8, q.y + q.len); ctx.stroke();
           if (q.y > height + q.len) Object.assign(q, makeParticle(false));
@@ -514,6 +595,8 @@
           if (q.y < -10) q.y = height + 8; else if (q.y > height + 10) q.y = -8;
         }
       }
+      if (type === 'snowdrift') drawSnowLedges(ctx, P.performance.now());
+      if (type === 'water') drawWaterStains(ctx, P.performance.now());
       ctx.globalAlpha = 1;
       particleFrame = P.requestAnimationFrame(drawParticles);
     }
