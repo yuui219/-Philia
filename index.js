@@ -420,6 +420,55 @@
   #${ID}-panel .particle-tune-row input{width:100%;min-width:0;height:18px;accent-color:var(--acc);margin:0;padding:0}
   #${ID}-panel .particle-tune-row output{font-size:10px;text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
   #${ID}-panel .particle-tune-reset{font-size:10px;color:var(--mut);cursor:pointer;padding:3px 6px;border-radius:8px;background:var(--card)}
+  /* 特效滑轨：强制覆盖酒馆与主题的原生立体滑轨边框 */
+  #${ID}-panel .particle-tune .particle-tune-row input[type="range"]{
+    -webkit-appearance:none!important;appearance:none!important;display:block;width:100%!important;
+    height:24px!important;min-height:24px!important;margin:0!important;padding:0!important;
+    border:0!important;outline:0!important;border-radius:0!important;
+    background:transparent!important;background-image:none!important;box-shadow:none!important;
+    filter:none!important;accent-color:var(--acc);touch-action:pan-y
+  }
+  #${ID}-panel .particle-tune .particle-tune-row input[type="range"]::-webkit-slider-runnable-track{
+    -webkit-appearance:none!important;height:3px!important;min-height:3px!important;
+    border:0!important;border-radius:99px!important;background:rgba(135,145,155,.24)!important;
+    background-image:none!important;box-shadow:none!important;outline:0!important
+  }
+  #${ID}-panel .particle-tune .particle-tune-row input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none!important;appearance:none!important;width:14px!important;height:14px!important;
+    margin-top:-5.5px!important;border:2px solid #fff!important;border-radius:50%!important;
+    background:var(--acc)!important;box-shadow:0 1px 4px rgba(40,45,55,.16)!important
+  }
+  #${ID}-panel .particle-tune .particle-tune-row input[type="range"]::-moz-range-track{
+    height:3px!important;border:0!important;border-radius:99px!important;
+    background:rgba(135,145,155,.24)!important;box-shadow:none!important
+  }
+  #${ID}-panel .particle-tune .particle-tune-row input[type="range"]::-moz-range-progress{
+    height:3px!important;border:0!important;border-radius:99px!important;
+    background:var(--acc)!important;opacity:.6
+  }
+  #${ID}-panel .particle-tune .particle-tune-row input[type="range"]::-moz-range-thumb{
+    width:10px!important;height:10px!important;border:2px solid #fff!important;border-radius:50%!important;
+    background:var(--acc)!important;box-shadow:0 1px 4px rgba(40,45,55,.16)!important
+  }
+  #${ID}-panel .particle-tune .particle-tune-row input[type="range"]:focus,
+  #${ID}-panel .particle-tune .particle-tune-row input[type="range"]:focus-visible{
+    outline:0!important;border:0!important;box-shadow:none!important
+  }
+  #${ID}-panel .translate-pair-list{display:flex;flex-direction:column;gap:6px;margin-top:5px}
+  #${ID}-panel .translate-pair{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    min-height:34px;padding:5px 8px 5px 11px;border-radius:11px;background:rgba(145,150,160,.08)}
+  #${ID}-panel .translate-pair>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    color:var(--ink);font-size:11px;letter-spacing:.04em}
+  #${ID}-panel .translate-pair button.pill[data-pair-remove]{
+    flex:none;min-width:42px;min-height:25px!important;height:25px!important;padding:0 9px!important;
+    border:0!important;border-radius:999px!important;background:rgba(220,115,130,.10)!important;
+    color:#b77b85!important;box-shadow:none!important;outline:0!important;
+    font-size:10px!important;font-weight:500!important;line-height:25px!important
+  }
+  #${ID}-panel .translate-pair button.pill[data-pair-remove]:active{
+    transform:scale(.97);background:rgba(220,115,130,.18)!important
+  }
+  #${ID}-panel .translate-pair-add button[data-pair-add]{border:0!important;box-shadow:none!important;outline:none!important}
   #${ID}-panel .translate-set{padding:11px}
   #${ID}-panel .translate-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
   #${ID}-panel .tt-switch{position:relative;display:inline-block;flex:none;width:44px;height:25px}
